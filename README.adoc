@@ -1,0 +1,90 @@
+= nxmatic macOS image build
+
+Minimal, owner-focused Tart/Packer project to build a customized Tahoe vanilla image.
+
+== Layout
+
+* `templates/vanilla-tahoe.pkr.hcl` — main Packer template
+* `scripts/` — provisioning scripts
+* `data/` — launchd plist payloads
+* `.flox/env/manifest.toml` — tool environment (`packer`, `tart`)
+* `Makefile` — automated commands
+
+== Quick start
+
+* Validate template: `make validate`
+* Build image: `make build`
+* Run VM + role disks: `make run`
+
+== Initialization policy (intentional)
+
+This project intentionally keeps VM initialization user-driven (interactive + debug by default).
+
+Reason: the Packer boot/command driver flow for this macOS setup is currently fragile, buggy in practice, and costly to maintain over time.
+Using interactive initialization keeps the workflow predictable and easier to recover when macOS UI behavior changes.
+
+== Required VM setting
+
+During initial VM setup, always enable Remote Login in macOS Settings (at least for your user):
+
+* `System Settings -> General -> Sharing -> Remote Login`
+
+Remote Login is required for reliable SSH-based provisioning/automation after first boot.
+
+Provisioning credentials must match the template SSH settings:
+
+* Username (bootstrap during provisioning):
+** clone mode: `admin`
+** ipsw mode: value of `macos_primary_account_name` (via Make: `.account.primary-name`)
+* Password: `admin`
+
+NOTE: Account alias login over SSH is currently not working for this image flow.
+For example, even when `nxmatic` is configured as an alias, SSH login must still use the
+primary macOS short name (`admin`).
+
+If you change the macOS account password during setup, update `ssh_password` in `templates/vanilla-tahoe.pkr.hcl` accordingly.
+
+== Display access choice
+
+For interactive setup, prefer Tart-handled display/VNC access.
+
+* Recommended default: use Tart display access + guest `Remote Login` (SSH).
+* Optional: enable macOS `Screen Sharing` only when you explicitly need guest-provided remote GUI access.
+
+In short: `Remote Login` is required; macOS `Screen Sharing` is optional.
+
+== Defaults
+
+* VM name: `nxmatic-macos`
+* Display geometry: `1728x1080`
+* Root disk: `100G`
+* Role disks (ASIF):
+** User Data: `160G`
+** User Library: `40G`
+** Git Store: `24G`
+** Nix Store: `180G`
+** Build Chains: `64G`
+* Initial in-VM APFS sizes:
+** User Data: `64G`
+** User Library: `20G`
+** Git Store: `12G`
+** Nix Store: `90G`
+** Build Chains: `16G`
+
+Disk paths default under:
+
+`~/.tart/disks/<vm_name>/`
+
+== Sizing policy
+
+For role disks, recommended max sizing policy is:
+
+* `max_size_gb = ceil(current_used_gb × 3)`
+
+This corresponds to 100% current usage + 200% growth headroom.
+
+The `Build Chains` disk is intended for toolchain-heavy paths such as `~/go`, `~/.m2`, `~/.npm`, and `~/.cache` to reduce pressure on the root/system container.
+
+== Override example
+
+`make build .vm-name=bioskop-macos .tart.disk.root.max-size-gb=120 .tart.disk.user-data.max-size-gb=240 .tart.disk.user-data.initial-size-gb=96 .tart.disk.nix-store.initial-size-gb=120`
