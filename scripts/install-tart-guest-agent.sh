@@ -75,19 +75,48 @@ sudo install -d -m 0755 /opt/tart-guest-agent/bin
 sudo install -m 0755 "${BIN_PATH}" /opt/tart-guest-agent/bin/tart-guest-agent
 test -x /opt/tart-guest-agent/bin/tart-guest-agent
 
-: "Patch uploaded daemon plist to match install location"
-sudo /usr/libexec/PlistBuddy -c "Set :ProgramArguments:0 /opt/tart-guest-agent/bin/tart-guest-agent" ~/tart-guest-daemon.plist
+: "Patch uploaded launch agent plist to match install location"
+sudo /usr/libexec/PlistBuddy -c "Set :ProgramArguments:0 /opt/tart-guest-agent/bin/tart-guest-agent" ~/tart-guest-agent.plist
 
-: "Install daemon plist into launchd system location"
-sudo mv ~/tart-guest-daemon.plist /Library/LaunchDaemons/org.cirruslabs.tart-guest-daemon.plist
-sudo chown root:wheel /Library/LaunchDaemons/org.cirruslabs.tart-guest-daemon.plist
-sudo chmod 0644 /Library/LaunchDaemons/org.cirruslabs.tart-guest-daemon.plist
+: "Resolve primary user home and install launch agent plist into user LaunchAgents location"
+PRIMARY_USER="${PRIMARY_ACCOUNT_NAME:-${TART_GUEST_AGENT_USER:-${SUDO_USER:-${USER}}}}"
+PRIMARY_HOME="$(dscl . -read "/Users/${PRIMARY_USER}" NFSHomeDirectory 2>/dev/null | awk '{print $2}' || true)"
+if [[ -z "${PRIMARY_HOME}" ]]; then
+  PRIMARY_HOME="/Users/${PRIMARY_USER}"
+fi
+LAUNCH_AGENT_PATH="${PRIMARY_HOME}/Library/LaunchAgents/org.cirruslabs.tart-guest-agent.plist"
 
-: "Validate daemon plist syntax"
-sudo plutil -lint /Library/LaunchDaemons/org.cirruslabs.tart-guest-daemon.plist
+sudo install -d -m 0755 "${PRIMARY_HOME}/Library/LaunchAgents"
+sudo mv ~/tart-guest-agent.plist "${LAUNCH_AGENT_PATH}"
+sudo chown "${PRIMARY_USER}:staff" "${LAUNCH_AGENT_PATH}"
+sudo chmod 0644 "${LAUNCH_AGENT_PATH}"
 
-: "Reload and kickstart daemon"
+: "Patch working directory to primary user home"
+sudo /usr/libexec/PlistBuddy -c "Set :WorkingDirectory ${PRIMARY_HOME}" "${LAUNCH_AGENT_PATH}"
+
+: "Validate launch agent plist syntax"
+sudo plutil -lint "${LAUNCH_AGENT_PATH}"
+
+: "Resolve target user/domain and bootstrap launch agent"
+TARGET_USER="${TART_GUEST_AGENT_USER:-${PRIMARY_USER}}"
+TARGET_UID="$(id -u "${TARGET_USER}")"
+DOMAIN="gui/${TARGET_UID}"
+if ! sudo launchctl print "${DOMAIN}" >/dev/null 2>&1; then
+  DOMAIN="user/${TARGET_UID}"
+fi
+
+sudo launchctl bootout "${DOMAIN}/org.cirruslabs.tart-guest-agent" >/dev/null 2>&1 || true
+sudo launchctl bootstrap "${DOMAIN}" "${LAUNCH_AGENT_PATH}"
+sudo launchctl enable "${DOMAIN}/org.cirruslabs.tart-guest-agent" || true
+sudo launchctl kickstart -k "${DOMAIN}/org.cirruslabs.tart-guest-agent" || true
+
+: "Best-effort cleanup of legacy system daemon if present"
 sudo launchctl bootout system/org.cirruslabs.tart-guest-daemon >/dev/null 2>&1 || true
-sudo launchctl bootstrap system /Library/LaunchDaemons/org.cirruslabs.tart-guest-daemon.plist
-sudo launchctl enable system/org.cirruslabs.tart-guest-daemon || true
-sudo launchctl kickstart -k system/org.cirruslabs.tart-guest-daemon || true
+if [[ -f /Library/LaunchDaemons/org.cirruslabs.tart-guest-daemon.plist ]]; then
+  sudo rm -f /Library/LaunchDaemons/org.cirruslabs.tart-guest-daemon.plist
+fi
+
+: "Best-effort cleanup of global LaunchAgents copy if present"
+if [[ -f /Library/LaunchAgents/org.cirruslabs.tart-guest-agent.plist ]]; then
+  sudo rm -f /Library/LaunchAgents/org.cirruslabs.tart-guest-agent.plist
+fi
