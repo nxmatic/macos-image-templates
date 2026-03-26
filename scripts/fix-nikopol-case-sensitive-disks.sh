@@ -263,19 +263,30 @@ attach_and_get_mount() {
 
 assert_case_sensitive() {
   local image="$1"
-  local attached base_dev mount vol_dev fs_personality
+  local attached base_dev mount
+  local probe_dir lower upper inode_lower inode_upper
 
-  attached="$(attach_and_get_mount "$image" 1)"
+  attached="$(attach_and_get_mount "$image" 0)"
   base_dev="${attached%%|*}"
   mount="${attached#*|}"
 
-  vol_dev="$(diskutil info "$mount" | awk -F': *' '/Device Node/{print $2; exit}')"
-  fs_personality="$(diskutil info "$vol_dev" | awk -F': *' '/File System Personality/{print $2; exit}')"
+  probe_dir="$mount/.case-sensitivity-probe-$$-$(date +%s)"
+  lower="$probe_dir/probe"
+  upper="$probe_dir/PROBE"
+
+  mkdir -p "$probe_dir"
+  : >"$lower"
+  : >"$upper"
+
+  inode_lower="$(stat -f '%i' "$lower")"
+  inode_upper="$(stat -f '%i' "$upper")"
+
+  rm -rf "$probe_dir"
 
   diskutil unmount force "$mount" >/dev/null 2>&1 || true
   diskutil detach "$base_dev" >/dev/null 2>&1 || true
 
-  [[ "$fs_personality" == *"Case-sensitive"* ]]
+  [[ "$inode_lower" != "$inode_upper" ]]
 }
 
 copy_data() {
