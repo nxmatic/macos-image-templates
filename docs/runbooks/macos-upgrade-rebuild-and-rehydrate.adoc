@@ -1,0 +1,231 @@
+= Runbook: macOS VM upgrade via rebuild + rehydrate
+
+This note summarizes what was reviewed, the current state, and a practical plan to recover an upgradeable macOS VM while preserving existing data disks and user state.
+
+== Executive summary
+
+* The in-guest update failure (`Failed to personalize the software update`) was traced to system-disk recovery layout constraints, not to data-disk sizing itself.
+* The current workflow already handles external role disks and user-home migration logic during provisioning in this repo.
+* The recommended path is:
++
+. Build a fresh, upgradeable system disk image.
+. Reuse existing populated external role disks.
+. Rehydrate and validate user/system behavior.
+. Cut over with rollback retained.
+
+== What was reviewed
+
+=== VM/build behavior and update constraints
+
+* System update personalization fails when recovery requirements are not met on the root macOS disk.
+* Resizing and removing/altering recovery can make OS updates fail even when free space exists.
+* Recovery behavior is a first-class build concern and must be explicit (`keep` or `relocate` for upgradeability).
+
+=== Current repository automation already in place
+
+In `nxmatic/macos-image-templates`:
+
+* `Makefile`
+** Creates/reuses role disk images (`prepare-disks`).
+** Passes role-disk paths and attach toggles to Packer vars.
+** Attaches role disks at build and run time.
+
+* `templates/vanilla-tahoe.pkr.hcl`
+** Uses `run_extra_args` to attach role disks during build when enabled.
+** Executes provisioning scripts in sequence.
+
+* `scripts/setup-data-disk.sh`
+** Detects non-`disk0` physical disks.
+** Assigns role disks and migrates/copies user data.
+** Attempts `/Users` relocation; falls back to copy mode when direct cutover is blocked.
+
+* `scripts/rename-primary-user-if-vanilla.sh`
+** Handles account rename and `NFSHomeDirectory` updates in clone mode.
+
+== Current state
+
+* External role disk provisioning is already implemented.
+* User-home migration logic is already implemented (with fallback path).
+* Main risk area is the root macOS disk updateability policy (recovery handling).
+
+== Target state
+
+* Upgradeable root system disk (OS updates work).
+* Existing external role disks reused (User Data, User Library, Git stores, Nix store, etc.).
+* Declarative post-OS configuration remains in `nix-darwin`.
+* Fast rollback path preserved.
+
+== C4 diagrams
+
+=== C4 Level 1: System Context
+
+[plantuml,c4-l1-system-context,svg]
+----
+@startuml
+left to right direction
+
+actor "Operator" as User
+rectangle "Host macOS + Tart" as Host {
+  rectangle "Packer build pipeline\n(nixmatic/macos-image-templates)" as Builder
+  rectangle "macOS VM\n(system disk + attached role disks)" as VM
+}
+rectangle "Nix ecosystem\n(nixpkgs, caches, flakes)" as Nix
+rectangle "OCI/VM registry" as OCI
+
+User --> Builder : Runs build/rebuild
+Builder --> VM : Creates and provisions image
+Builder --> OCI : Pull base image / push artifact
+VM --> Nix : Pulls closures/packages
+User --> VM : Uses migrated environment
+@enduml
+----
+
+=== C4 Level 2: Container View (Build/Provisioning)
+
+[plantuml,c4-l2-container-view,svg]
+----
+@startuml
+left to right direction
+
+rectangle "Build Orchestration" {
+  rectangle "Makefile" as Make
+  rectangle "Packer template\n(vanilla-tahoe.pkr.hcl)" as Pkr
+}
+
+rectangle "Provisioning Scripts" {
+  rectangle "provision-base-system.sh" as Base
+  rectangle "setup-data-disk.sh" as Data
+  rectangle "rename-primary-user-if-vanilla.sh" as Rename
+  rectangle "install-nix-installer.sh" as NixInstall
+}
+
+rectangle "Runtime Artifacts" {
+  rectangle "Root disk (macOS)" as Root
+  rectangle "Role disks\n(User Data / Library / Git / Nix / Build Chains / VM Images)" as Role
+}
+
+Make --> Pkr : passes vars/toggles
+Pkr --> Base : executes
+Pkr --> Data : executes
+Pkr --> Rename : executes
+Pkr --> NixInstall : executes
+Data --> Role : detect/format/migrate
+Base --> Root : base hardening
+Rename --> Root : account/home record updates
+NixInstall --> Root : install nix tooling
+@enduml
+----
+
+=== C4 Level 3: Component View (Data/Home migration path)
+
+[plantuml,c4-l3-component-data-home,svg]
+----
+@startuml
+left to right direction
+
+rectangle "setup-data-disk.sh" {
+  rectangle "Disk discovery\n(non-disk0 physical)" as C1
+  rectangle "Role assignment\n(order-based)" as C2
+  rectangle "APFS init/resize/mount" as C3
+  rectangle "Users relocation attempt" as C4
+  rectangle "Fallback home copy" as C5
+  rectangle "Post checks\n(/Users, /private/var/lib)" as C6
+}
+
+C1 --> C2
+C2 --> C3
+C3 --> C4
+C4 --> C6 : success path
+C4 --> C5 : if protected root blocks cutover
+C5 --> C6
+@enduml
+----
+
+=== C4 Level 4: Deployment View (Cutover plan)
+
+[plantuml,c4-l4-deployment-cutover,svg]
+----
+@startuml
+left to right direction
+
+node "Host" {
+  node "Current VM" as OldVM {
+    artifact "Old root disk" as OldRoot
+    artifact "Role disks (existing data)" as SharedDisks
+  }
+
+  node "New VM" as NewVM {
+    artifact "New root disk\n(upgradeable)" as NewRoot
+    artifact "Role disks (reused)" as ReusedDisks
+  }
+}
+
+OldVM --> SharedDisks
+NewVM --> ReusedDisks
+SharedDisks --> ReusedDisks : reuse/reattach
+OldRoot --> NewRoot : do NOT clone root blindly
+@enduml
+----
+
+== Plan to solve
+
+=== Phase 1 — Freeze and snapshot
+
+. Keep current VM as rollback.
+. Snapshot/clone before changes.
+. Record current effective disk paths and account/home mapping.
+
+=== Phase 2 — Build a new upgradeable root image
+
+. Build a fresh VM root image with recovery policy suitable for updates (`keep` or `relocate`).
+. Keep external role disks out of destructive operations.
+
+=== Phase 3 — Reattach/reuse role disks
+
+. Reuse existing role disk image paths (do not recreate if already populated).
+. Attach role disks during build/run using existing Make/Packer wiring.
+. Let provisioning reconcile mounts/home strategy.
+
+=== Phase 4 — Rehydrate config and validate
+
+. Apply nix-darwin configuration and required host preferences.
+. Validate account identity, home location, mounted role disks, and critical toolchains.
+. Validate update flow (`softwareupdate`) on the new root image.
+
+=== Phase 5 — Cutover and rollback window
+
+. Switch normal usage to new VM.
+. Keep old VM/root image for confidence window (24-72h or several successful boots).
+. Decommission old root disk only after confidence criteria pass.
+
+== Decision notes: can this be done with Nix only?
+
+Short answer: partially.
+
+* `nix-darwin` is excellent for post-install declarative configuration of macOS.
+* Nix can provide packages/closures/caches for Darwin userspace and tooling.
+* Nix does **not** replace Apple’s macOS installer/restore image process for creating a legal/bootable macOS base system disk.
+
+Practical model:
+
+. Use Tart + IPSW/base image workflow to create the macOS system disk.
+. Use `nix-darwin` to converge OS settings, services, and user environment after boot.
+. Optionally prefetch/prime Nix closures for faster hydration, but keep base OS creation in the Apple/Tart pipeline.
+
+== Risks and mitigations
+
+* Risk: role-disk assignment is order-based.
+** Mitigation: keep deterministic attach order and stable paths in Make vars.
+
+* Risk: `/Users` direct relocation can be blocked by root protections.
+** Mitigation: rely on fallback copy path plus explicit `NFSHomeDirectory` validation.
+
+* Risk: carrying old root assumptions into new VM.
+** Mitigation: treat root disk as disposable/rebuildable, reuse only external role disks.
+
+== Success criteria
+
+* macOS updates on new VM no longer fail with personalization error.
+* Role disks mount with expected data intact.
+* Primary account/home path is correct after reboot.
+* nix-darwin convergence succeeds and daily workflows run unchanged.
