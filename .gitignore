@@ -1,0 +1,10 @@
+.DS_Store
+
+# Project-local Tart state
+.tart/
+
+# Flox generated runtime/cache state
+.flox/cache/
+.flox/log/
+.flox/run/
+.flox/env.json

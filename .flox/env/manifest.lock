@@ -1,0 +1,453 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {
+      "gnumake": {
+        "pkg-path": "gnumake"
+      },
+      "packer": {
+        "pkg-path": "packer"
+      },
+      "remake": {
+        "pkg-path": "remake"
+      },
+      "tart": {
+        "pkg-path": "tart",
+        "systems": [
+          "x86_64-darwin",
+          "aarch64-darwin"
+        ]
+      }
+    },
+    "hook": {},
+    "profile": {},
+    "options": {}
+  },
+  "packages": [
+    {
+      "attr_path": "gnumake",
+      "broken": false,
+      "derivation": "/nix/store/79lq7kz221dl0wrkycgyxvkvv02p1yfp-gnumake-4.4.1.drv",
+      "description": "Tool to control the generation of non-source files from sources",
+      "install_id": "gnumake",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "name": "gnumake-4.4.1",
+      "pname": "gnumake",
+      "rev": "dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "rev_count": 955442,
+      "rev_date": "2026-02-27T13:13:23Z",
+      "scrape_date": "2026-03-01T04:40:13.393534Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.4.1",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "doc": "/nix/store/rz0cl03rws25hb625ysz58h4jci9zaxx-gnumake-4.4.1-doc",
+        "info": "/nix/store/a5aasi52xsdvwxn1kqsxahfr40b92cb9-gnumake-4.4.1-info",
+        "man": "/nix/store/0qrs1ij6pa43h6d2kvy432gii6gzdyww-gnumake-4.4.1-man",
+        "out": "/nix/store/l8jkq4dnsknlxz436w6gw5rcm09mvq6p-gnumake-4.4.1"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gnumake",
+      "broken": false,
+      "derivation": "/nix/store/h3l8lwva97yc37fjwvd4l26gsk9vhfs3-gnumake-4.4.1.drv",
+      "description": "Tool to control the generation of non-source files from sources",
+      "install_id": "gnumake",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "name": "gnumake-4.4.1",
+      "pname": "gnumake",
+      "rev": "dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "rev_count": 955442,
+      "rev_date": "2026-02-27T13:13:23Z",
+      "scrape_date": "2026-03-01T05:10:56.753058Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.4.1",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/1ba52w1pz1h7jfi4kc02m21jxvncwb14-gnumake-4.4.1-debug",
+        "doc": "/nix/store/r238n9mfsxpl826l35127ng810pifb7c-gnumake-4.4.1-doc",
+        "info": "/nix/store/d49b6qcdpzxqifrysyc2a63x2hdcgbyn-gnumake-4.4.1-info",
+        "man": "/nix/store/3avxkf4xbqp7r0sarmij3cs6ig2whn0l-gnumake-4.4.1-man",
+        "out": "/nix/store/ll59b86m0kn5gxmk0qvrgb5vkl7wsw6d-gnumake-4.4.1"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gnumake",
+      "broken": false,
+      "derivation": "/nix/store/prgskmibgpf3b88jash6xh5iyan6jr9s-gnumake-4.4.1.drv",
+      "description": "Tool to control the generation of non-source files from sources",
+      "install_id": "gnumake",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "name": "gnumake-4.4.1",
+      "pname": "gnumake",
+      "rev": "dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "rev_count": 955442,
+      "rev_date": "2026-02-27T13:13:23Z",
+      "scrape_date": "2026-03-01T05:40:11.230004Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.4.1",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "doc": "/nix/store/d5iqi0n18b0qhkdzn43ninhwlnr6cp5y-gnumake-4.4.1-doc",
+        "info": "/nix/store/cr97vh5g50wql7k3v7gvkiinxyq3plbq-gnumake-4.4.1-info",
+        "man": "/nix/store/1pvfnfv9abkm4w76r728bhbl7i1fm0vv-gnumake-4.4.1-man",
+        "out": "/nix/store/vrsm757lm1rfwqplz17cynq1g9fcyv8w-gnumake-4.4.1"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gnumake",
+      "broken": false,
+      "derivation": "/nix/store/qplc112r2iwqrhw1di10yyjfipahkiik-gnumake-4.4.1.drv",
+      "description": "Tool to control the generation of non-source files from sources",
+      "install_id": "gnumake",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "name": "gnumake-4.4.1",
+      "pname": "gnumake",
+      "rev": "dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "rev_count": 955442,
+      "rev_date": "2026-02-27T13:13:23Z",
+      "scrape_date": "2026-03-01T06:16:58.101978Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.4.1",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/lja6ghxrkm2c0i6cgyd88ckpzkdiwjy4-gnumake-4.4.1-debug",
+        "doc": "/nix/store/s5mwixm6ks90jxkz69vsl4mdafqqw4kb-gnumake-4.4.1-doc",
+        "info": "/nix/store/d0jpi3dn36051rnlpcl218yjc2k2mm79-gnumake-4.4.1-info",
+        "man": "/nix/store/glc6p5665hd292d3lx1a7rz3f8zwb0r2-gnumake-4.4.1-man",
+        "out": "/nix/store/d0irz6jq0d16h6iggq1mcwwvvxzi4lvy-gnumake-4.4.1"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "packer",
+      "broken": false,
+      "derivation": "/nix/store/vvbi3hfvn9rl16sr4pc12q85s7wczsz7-packer-1.15.0.drv",
+      "description": "Tool for creating identical machine images for multiple platforms from a single source configuration",
+      "install_id": "packer",
+      "license": "BUSL-1.1",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "name": "packer-1.15.0",
+      "pname": "packer",
+      "rev": "dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "rev_count": 955442,
+      "rev_date": "2026-02-27T13:13:23Z",
+      "scrape_date": "2026-03-01T04:40:40.625868Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": true,
+      "version": "1.15.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/2kzaj1m9znkgyyr5m91ckxd4z24kn8xg-packer-1.15.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "packer",
+      "broken": false,
+      "derivation": "/nix/store/zbz14lvyvyns8b120y7sypdaq0g7d3is-packer-1.15.0.drv",
+      "description": "Tool for creating identical machine images for multiple platforms from a single source configuration",
+      "install_id": "packer",
+      "license": "BUSL-1.1",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "name": "packer-1.15.0",
+      "pname": "packer",
+      "rev": "dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "rev_count": 955442,
+      "rev_date": "2026-02-27T13:13:23Z",
+      "scrape_date": "2026-03-01T05:11:38.007046Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": true,
+      "version": "1.15.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/lv9k151bgvg7xvjiczm4krylz9rya0xc-packer-1.15.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "packer",
+      "broken": false,
+      "derivation": "/nix/store/96g5y2f2myy33n20i643i2wd4l8ifb2i-packer-1.15.0.drv",
+      "description": "Tool for creating identical machine images for multiple platforms from a single source configuration",
+      "install_id": "packer",
+      "license": "BUSL-1.1",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "name": "packer-1.15.0",
+      "pname": "packer",
+      "rev": "dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "rev_count": 955442,
+      "rev_date": "2026-02-27T13:13:23Z",
+      "scrape_date": "2026-03-01T05:40:39.025194Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": true,
+      "version": "1.15.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/vqgd4mnq8vjs70svsvpc4yajhj4ycqp0-packer-1.15.0"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "packer",
+      "broken": false,
+      "derivation": "/nix/store/9a023mjqzivwg3p7z5l719lmb8vw5fpi-packer-1.15.0.drv",
+      "description": "Tool for creating identical machine images for multiple platforms from a single source configuration",
+      "install_id": "packer",
+      "license": "BUSL-1.1",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "name": "packer-1.15.0",
+      "pname": "packer",
+      "rev": "dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "rev_count": 955442,
+      "rev_date": "2026-02-27T13:13:23Z",
+      "scrape_date": "2026-03-01T06:17:42.735538Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": true,
+      "version": "1.15.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/0xlmazgpvf60ff6c3dk247h0283v8s63-packer-1.15.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "remake",
+      "broken": false,
+      "derivation": "/nix/store/xgcz2ccq27vw9dwxcsd4vzmvrh1wclrw-remake-4.3+dbg-1.6.drv",
+      "description": "GNU Make with comprehensible tracing and a debugger",
+      "install_id": "remake",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "name": "remake-4.3+dbg-1.6",
+      "pname": "remake",
+      "rev": "dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "rev_count": 955442,
+      "rev_date": "2026-02-27T13:13:23Z",
+      "scrape_date": "2026-03-01T04:41:33.739750Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.6",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/367vq9hrvdp70gx9bjw3lx7wkxifbpzf-remake-4.3+dbg-1.6"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "remake",
+      "broken": false,
+      "derivation": "/nix/store/24m9wfikz7rrdwqaq97sggl99hfvv1m7-remake-4.3+dbg-1.6.drv",
+      "description": "GNU Make with comprehensible tracing and a debugger",
+      "install_id": "remake",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "name": "remake-4.3+dbg-1.6",
+      "pname": "remake",
+      "rev": "dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "rev_count": 955442,
+      "rev_date": "2026-02-27T13:13:23Z",
+      "scrape_date": "2026-03-01T05:12:44.424704Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.6",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/qmcyz52ikcgsnvr5p14znq74g10bm7kr-remake-4.3+dbg-1.6"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "remake",
+      "broken": false,
+      "derivation": "/nix/store/lviwzwn2rj54k0q2pm928whzrnq2lz97-remake-4.3+dbg-1.6.drv",
+      "description": "GNU Make with comprehensible tracing and a debugger",
+      "install_id": "remake",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "name": "remake-4.3+dbg-1.6",
+      "pname": "remake",
+      "rev": "dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "rev_count": 955442,
+      "rev_date": "2026-02-27T13:13:23Z",
+      "scrape_date": "2026-03-01T05:41:31.808387Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.6",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/8hhqc1ln75l0yj4cvknw26qhlz6s17a7-remake-4.3+dbg-1.6"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "remake",
+      "broken": false,
+      "derivation": "/nix/store/xbapxnshvxpg1dgh6cxhdh9jaahrxyj2-remake-4.3+dbg-1.6.drv",
+      "description": "GNU Make with comprehensible tracing and a debugger",
+      "install_id": "remake",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "name": "remake-4.3+dbg-1.6",
+      "pname": "remake",
+      "rev": "dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "rev_count": 955442,
+      "rev_date": "2026-02-27T13:13:23Z",
+      "scrape_date": "2026-03-01T06:18:51.773626Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.6",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/76yrj6cxxz445wjzrigqf3zlalgjmz8b-remake-4.3+dbg-1.6"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "tart",
+      "broken": false,
+      "derivation": "/nix/store/f3574y2q78y4hinjyfs9xg709cbb0q8m-tart-2.30.6.drv",
+      "description": "macOS and Linux VMs on Apple Silicon to use in CI and other automations",
+      "install_id": "tart",
+      "license": "Fair Source License, version 0.9",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "name": "tart-2.30.6",
+      "pname": "tart",
+      "rev": "dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "rev_count": 955442,
+      "rev_date": "2026-02-27T13:13:23Z",
+      "scrape_date": "2026-03-01T04:41:56.209738Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": true,
+      "version": "2.30.6",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/cxn82n5rcyx1wzjr4hdxkpffg1p3j5xk-tart-2.30.6"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "tart",
+      "broken": false,
+      "derivation": "/nix/store/nhrqgwkviwpmgx1sd8459mnvsk5qk8zn-tart-2.30.6.drv",
+      "description": "macOS and Linux VMs on Apple Silicon to use in CI and other automations",
+      "install_id": "tart",
+      "license": "Fair Source License, version 0.9",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "name": "tart-2.30.6",
+      "pname": "tart",
+      "rev": "dd9b079222d43e1943b6ebd802f04fd959dc8e61",
+      "rev_count": 955442,
+      "rev_date": "2026-02-27T13:13:23Z",
+      "scrape_date": "2026-03-01T05:41:54.208709Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": true,
+      "version": "2.30.6",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/jgw4pw6jch8yz8anhhmyxp360v8ip4f9-tart-2.30.6"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}
