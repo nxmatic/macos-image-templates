@@ -283,6 +283,9 @@ copy_data() {
   local dst_img="$2"
   local src_attached dst_attached src_dev src_mount dst_dev dst_mount
   local rsync_ec=0
+  local rsync_stderr
+  local non_vanished_lines
+  local copy_tool
 
   src_attached="$(attach_and_get_mount "$src_img" 1)"
   src_dev="${src_attached%%|*}"
@@ -292,13 +295,44 @@ copy_data() {
   dst_dev="${dst_attached%%|*}"
   dst_mount="${dst_attached#*|}"
 
-  set +e
-  rsync "${RSYNC_ARGS[@]}" "${RSYNC_EXCLUDES[@]}" "$src_mount/" "$dst_mount/"
-  rsync_ec=$?
-  set -e
+  copy_tool="${COPY_TOOL:-auto}"
+  if [[ "$copy_tool" == "auto" ]]; then
+    if [[ "$(uname -s)" == "Darwin" ]] && command -v ditto >/dev/null 2>&1; then
+      copy_tool="ditto"
+    else
+      copy_tool="rsync"
+    fi
+  fi
 
-  if [[ "$rsync_ec" -ne 0 && "$rsync_ec" -ne 24 ]]; then
-    echo "ERROR: rsync failed with exit code $rsync_ec" >&2
+  if [[ "$copy_tool" == "ditto" ]]; then
+    # Darwin-native metadata-aware copy path.
+    # Source is mounted read-only, destination is writable staging volume.
+    ditto --acl --extattr --rsrc "$src_mount" "$dst_mount"
+    rsync_ec=0
+  else
+    rsync_stderr="$(mktemp -t fix-nikopol-rsync-stderr.XXXXXX)"
+
+    set +e
+    rsync "${RSYNC_ARGS[@]}" "${RSYNC_EXCLUDES[@]}" "$src_mount/" "$dst_mount/" 2> >(tee "$rsync_stderr" >&2)
+    rsync_ec=$?
+    set -e
+
+    # openrsync often reports transient missing-source races as exit 23
+    # (instead of 24). Accept exit 23 only when every stderr line is a
+    # benign missing-source/openat condition.
+    if [[ "$rsync_ec" -eq 23 ]]; then
+      non_vanished_lines="$(grep -Ev '^$|No such file or directory|openat: No such file or directory|vanished|file has vanished' "$rsync_stderr" || true)"
+      if [[ -z "$non_vanished_lines" ]]; then
+        log "WARN: rsync exit 23 contained only transient missing-source errors; continuing."
+        rsync_ec=0
+      fi
+    fi
+
+    rm -f "$rsync_stderr"
+
+    if [[ "$rsync_ec" -ne 0 && "$rsync_ec" -ne 24 ]]; then
+      echo "ERROR: rsync failed with exit code $rsync_ec" >&2
+    fi
   fi
 
   diskutil unmount force "$src_mount" >/dev/null 2>&1 || true
