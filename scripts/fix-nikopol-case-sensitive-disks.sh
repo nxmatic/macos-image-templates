@@ -109,15 +109,7 @@ SPECS=(
 
 log() { printf '%s\n' "$*"; }
 
-RSYNC_ARGS=()
-RSYNC_EXCLUDES=(
-  --exclude='.ssh/agent/'
-  --exclude='**/*.sock'
-  --exclude='Library/Caches/**'
-  --exclude='Library/Containers/*/Data/Library/Caches/**'
-  --exclude='Library/Containers/*/Data/SystemData/com.apple.chrono/**'
-  --exclude='Library/Containers/com.apple.mediaanalysisd/Data/Library/Caches/**'
-)
+COPY_BACKEND="ditto"
 
 rsync_help_text() {
   rsync --help 2>&1 || true
@@ -363,16 +355,13 @@ copy_data() {
 
 ts="$(date +%Y%m%d-%H%M%S)"
 
-init_rsync_args
-
 log "VM_NAME=$VM_NAME"
 log "TART_HOME=$TART_HOME"
 log "DISKS_DIR=$DISKS_DIR"
 log "STAGING_DIR=$STAGING_DIR"
 log "MODE=$([[ "$APPLY" -eq 1 ]] && echo apply || echo dry-run)"
 log "ACTIVATE=$ACTIVATE"
-log "RSYNC_ARGS=${RSYNC_ARGS[*]}"
-log "RSYNC_EXCLUDES=${RSYNC_EXCLUDES[*]}"
+log "COPY_BACKEND=$COPY_BACKEND"
 
 run mkdir -p "$STAGING_DIR"
 
@@ -393,7 +382,16 @@ for spec in "${SPECS[@]}"; do
     rm -f "$staging"
   fi
 
-  run diskutil image create blank --format ASIF --size "${size_gb}G" --fs "Case-sensitive APFS" --volumeName "$volume_label" "$staging"
+  if [[ "$APPLY" -eq 1 ]]; then
+    if ! diskutil image create blank --format ASIF --size "${size_gb}G" --fs APFSX --volumeName "$volume_label" "$staging"; then
+      diskutil image create blank --format ASIF --size "${size_gb}G" --fs "Case-sensitive APFS" --volumeName "$volume_label" "$staging"
+    fi
+  else
+    printf 'DRY-RUN: '
+    printf '%q ' diskutil image create blank --format ASIF --size "${size_gb}G" --fs APFSX --volumeName "$volume_label" "$staging"
+    printf '
+'
+  fi
 
   if [[ "$APPLY" -eq 1 ]]; then
     ensure_case_sensitive_image "$staging" "$volume_label"
