@@ -76,9 +76,9 @@ remake.pkg-path = "remake"
 ## ... environments to create a composed environment
 ## ------------------------------------------------------------------
 [include]
-# environments = [
-#     { dir = "../common" }
-# ]
+  environments = [
+      { dir = "../fleet/flox/asciidoc" }
+  ]
 
 
 ## Build and publish your own packages ------------------------------
