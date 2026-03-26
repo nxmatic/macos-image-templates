@@ -212,6 +212,33 @@ run() {
   fi
 }
 
+attached_base_device_for_image() {
+  local image="$1"
+  hdiutil info 2>/dev/null | awk -v img="$image" '
+    $1 == "image-path" {
+      in_image = (index($0, img) > 0)
+      next
+    }
+    in_image && /^\/dev\/disk[0-9]+/ {
+      print $1
+      exit
+    }
+  '
+}
+
+detach_image_if_attached() {
+  local image="$1"
+  local base_dev
+
+  base_dev="$(attached_base_device_for_image "$image")"
+  if [[ -n "$base_dev" ]]; then
+    log "Detaching stale attachment for image: $image ($base_dev)"
+    diskutil unmountDisk force "$base_dev" >/dev/null 2>&1 || true
+    hdiutil detach -force "$base_dev" >/dev/null 2>&1 || true
+    diskutil detach force "$base_dev" >/dev/null 2>&1 || true
+  fi
+}
+
 attach_and_get_mount() {
   local image="$1"
   local readonly_flag="$2"
@@ -378,6 +405,7 @@ for spec in "${SPECS[@]}"; do
 
   log "=== $base ==="
   if [[ "$APPLY" -eq 1 && -f "$staging" ]]; then
+    detach_image_if_attached "$staging"
     log "Removing existing staging image: $staging"
     rm -f "$staging"
   fi
