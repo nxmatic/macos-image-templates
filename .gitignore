@@ -1,8 +1,8 @@
 .DS_Store
 
 # Project-local Tart state
-.tart/
-.tart.foreign/
+.tart*/
+*.asif
 
 # Local Copilot scratch artifacts
 .github/copilot.d/tmp/
