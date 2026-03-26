@@ -13,6 +13,8 @@ if [[ -f "${ENV_FILE}" ]]; then
 fi
 
 : "${ENABLE_SAFARI_REMOTE_AUTOMATION:=1}"
+: "${DISABLE_SPOTLIGHT_INDEXING:=1}"
+: "${SPOTLIGHT_DISABLE_MDS_DAEMON:=1}"
 : "${PRIMARY_ACCOUNT_NAME:=admin}"
 : "${PRIMARY_ACCOUNT_FULL_NAME:=Stephane Lacoin (aka nxmatic)}"
 : "${PRIMARY_ACCOUNT_ALIAS:=nxmatic}"
@@ -89,3 +91,21 @@ sudo defaults write /Library/Preferences/com.apple.SoftwareUpdate AutomaticDownl
 sudo defaults write /Library/Preferences/com.apple.SoftwareUpdate AutomaticallyInstallMacOSUpdates -bool false
 sudo defaults write /Library/Preferences/com.apple.commerce AutoUpdate -bool false
 sudo defaults write /Library/Preferences/com.apple.commerce AutoUpdateRestartRequired -bool false
+
+if [[ "${DISABLE_SPOTLIGHT_INDEXING}" == "1" ]]; then
+	: "Disable Spotlight indexing globally for mounted APFS volumes"
+	sudo mdutil -a -i off || true
+
+	while IFS= read -r mount_point; do
+		[[ -z "${mount_point}" ]] && continue
+		sudo mdutil -i off "${mount_point}" >/dev/null 2>&1 || true
+		sudo touch "${mount_point}/.metadata_never_index" >/dev/null 2>&1 || true
+	done < <(mount | awk -F ' on ' '/\(apfs/ { split($2, parts, " \\(" ); print parts[1] }')
+
+	if [[ "${SPOTLIGHT_DISABLE_MDS_DAEMON}" == "1" ]]; then
+		: "Best-effort: disable mds launchd unit so it does not restart in this VM"
+		sudo launchctl disable system/com.apple.metadata.mds >/dev/null 2>&1 || true
+		sudo launchctl bootout system /System/Library/LaunchDaemons/com.apple.metadata.mds.plist >/dev/null 2>&1 || true
+		sudo killall mds mds_stores mdworker mdworker_shared >/dev/null 2>&1 || true
+	fi
+fi

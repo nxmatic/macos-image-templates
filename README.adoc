@@ -88,3 +88,53 @@ The `Build Chains` disk is intended for toolchain-heavy paths such as `~/go`, `~
 == Override example
 
 `make build .vm-name=bioskop-macos .tart.disk.root.max-size-gb=120 .tart.disk.user-data.max-size-gb=240 .tart.disk.user-data.initial-size-gb=96 .tart.disk.nix-store.initial-size-gb=120`
+
+== VSCode-focused background service trimming
+
+During provisioning, `scripts/trim-vscode-vm-services.sh` applies a lightweight background-service profile intended for SSH/VSCode-heavy VM usage.
+
+Default behavior:
+
+* Disable Spotlight indexing across mounted APFS volumes.
+* Add `.metadata_never_index` markers on mounted APFS volumes.
+* Purge Spotlight assets by default using `mdutil -E` on mounted APFS volumes.
+* Fallback to direct `.Spotlight-V100*` cleanup only when `mdutil -E` fails on a writable mount.
+* Disable Spotlight daemon:
+** `com.apple.metadata.mds`
+* Disable media analysis daemons:
+** `com.apple.mediaanalysisd`
+** `com.apple.photoanalysisd`
+* Disable Siri/suggestions style user agents for the primary user:
+** `com.apple.assistantd`
+** `com.apple.parsecd`
+** `com.apple.suggestd`
+** `com.apple.knowledge-agent`
+* Keep continuity/nearby-sharing enabled by default (safer for multi-host workflows).
+* Optionally disable continuity/nearby-sharing style user agents for the primary user when `DISABLE_AIRDROP_CONTINUITY=1`:
+** `com.apple.sharingd`
+** `com.apple.coreservices.useractivityd`
+
+Safety notes:
+
+* Core SSH/network services are intentionally not disabled.
+* Some launchd labels can vary by macOS release; disabling is best-effort.
+
+Control toggles:
+
+* `DISABLE_SPOTLIGHT_INDEXING` (default `1`)
+* `SPOTLIGHT_DISABLE_MDS_DAEMON` (default `1`)
+* `SPOTLIGHT_PURGE_ASSETS` (default `1`)
+* `DISABLE_MEDIA_ANALYSIS_DAEMONS` (default `1`)
+* `DISABLE_SIRI_AND_SUGGESTIONS` (default `1`)
+* `DISABLE_AIRDROP_CONTINUITY` (default `0`)
+
+Service mode:
+
+* `SERVICE_TRIM_MODE=disable|enable` (default `disable`)
+
+Re-activation examples inside VM:
+
+* Re-enable all service groups currently selected by toggles:
+** `sudo env SERVICE_TRIM_MODE=enable /usr/local/sbin/trim-vscode-vm-services`
+* Re-enable continuity services only (when they were explicitly disabled):
+** `sudo env SERVICE_TRIM_MODE=enable DISABLE_SPOTLIGHT_INDEXING=0 DISABLE_MEDIA_ANALYSIS_DAEMONS=0 DISABLE_SIRI_AND_SUGGESTIONS=0 DISABLE_AIRDROP_CONTINUITY=1 /usr/local/sbin/trim-vscode-vm-services`

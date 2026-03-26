@@ -3,7 +3,7 @@
 <plist version="1.0">
     <dict>
         <key>Label</key>
-        <string>org.cirruslabs.tart-guest-daemon</string>
+        <string>org.cirruslabs.tart-guest-agent</string>
         <key>ProgramArguments</key>
         <array>
             <string>/opt/tart-guest-agent/bin/tart-guest-agent</string>
@@ -21,8 +21,8 @@
         <key>KeepAlive</key>
         <true/>
         <key>StandardOutPath</key>
-        <string>/tmp/tart-guest-daemon.log</string>
+        <string>/tmp/tart-guest-agent.log</string>
         <key>StandardErrorPath</key>
-        <string>/tmp/tart-guest-daemon.log</string>
+        <string>/tmp/tart-guest-agent.log</string>
     </dict>
 </plist>
