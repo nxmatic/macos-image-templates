@@ -32,6 +32,7 @@ define .env.file.content
 TART_WORKING_VM=$(.tart.vm.name)
 TART_EXTRA_DISKS_ADD_RENAMED=$(TART_EXTRA_DISKS_ADD_RENAMED)
 TART_EXTRA_DISKS_RENAMED_FROM_VM=$(TART_EXTRA_DISKS_RENAMED_FROM_VM)
+TART_ATTACH_FOREIGN_RENAMED=$(TART_ATTACH_FOREIGN_RENAMED)
 endef
 
 define .packer.run
@@ -199,11 +200,16 @@ endef
 .tart.run.extra-disks ?=
 .tart.run.extra-disks.from-vm ?=
 .tart.run.extra-disks.allow-duplicate-roles ?= 0
+.tart.run.attach-foreign-renamed ?= $(if $(strip $(TART_ATTACH_FOREIGN_RENAMED)),$(TART_ATTACH_FOREIGN_RENAMED),0)
 .tart.run.extra-disks.add-renamed ?= $(TART_EXTRA_DISKS_ADD_RENAMED)
-.tart.run.extra-disks.renamed.from-vm ?= $(TART_EXTRA_DISKS_RENAMED_FROM_VM)
+.tart.run.extra-disks.renamed.from-vm ?= $(if $(strip $(TART_EXTRA_DISKS_RENAMED_FROM_VM)),$(TART_EXTRA_DISKS_RENAMED_FROM_VM),$(.tart.vm.name))
 .tart.run.extra-disk.opts ?= sync=none
 .tart.run.extra-args ?=
 .rm.skip-owned-disks-when-add-renamed ?= 1
+
+.tart.run.extra-disks.add-renamed.effective = $(if $(filter true 1 yes on,$(strip $(.tart.run.attach-foreign-renamed))),1,$(.tart.run.extra-disks.add-renamed))
+.tart.run.extra-disks.renamed.from-vm.effective = $(.tart.run.extra-disks.renamed.from-vm)
+.tart.run.extra-disks.allow-duplicate-roles.effective = $(if $(filter true 1 yes on,$(strip $(.tart.run.attach-foreign-renamed))),1,$(.tart.run.extra-disks.allow-duplicate-roles))
 
 # Foreign/local rename source selection
 .tart.disk.rename.home ?= $(.tart.home.foreign)
@@ -399,11 +405,11 @@ $(foreach d,$(.tart.run.extra-disks.effective),--disk="$(d)$(.tart.run.extra-dis
 endef
 
 define .tart.run.extra.disk.args.from-vm.shell
-extra_from_vm_args=""
+extra_from_vm_args=()
 auto_renamed_mode=0
 from_vm_name="$(strip $(.tart.run.extra-disks.from-vm))"
-if [[ -z "$${from_vm_name}" && "$(.tart.run.extra-disks.add-renamed)" == "1" ]]; then
-	from_vm_name="$(strip $(.tart.run.extra-disks.renamed.from-vm))"
+if [[ -z "$${from_vm_name}" && "$(.tart.run.extra-disks.add-renamed.effective)" == "1" ]]; then
+	from_vm_name="$(strip $(.tart.run.extra-disks.renamed.from-vm.effective))"
 	auto_renamed_mode=1
 fi
 if [[ -n "$${from_vm_name}" ]]; then
@@ -445,7 +451,7 @@ if [[ -n "$${from_vm_name}" ]]; then
 			fi
 
 			is_role_duplicate=0
-			if [[ "$(.tart.run.extra-disks.allow-duplicate-roles)" != "1" ]]; then
+			if [[ "$(.tart.run.extra-disks.allow-duplicate-roles.effective)" != "1" ]]; then
 				for role_base in $(.tart.run.role-disk.basenames); do
 					if [[ "$$normalized_base" == "$$role_base" ]]; then
 						is_role_duplicate=1
@@ -458,8 +464,12 @@ if [[ -n "$${from_vm_name}" ]]; then
 				continue
 			fi
 
-			extra_from_vm_args+=" --disk=\"$${img}$(.tart.run.extra-disk.opts.suffix)\""
+			extra_from_vm_args+=(--disk="$${img}$(.tart.run.extra-disk.opts.suffix)")
 		done < <(find "$${scan_dir}" -maxdepth 1 -type f -name "$${scan_pattern}" -print0 | LC_ALL=C sort -z)
+		if [[ "$$auto_renamed_mode" == "1" && "$${#extra_from_vm_args[@]}" -eq 0 ]]; then
+			echo "Info: renamed-disk mode enabled, but no disks matched '$${scan_pattern}' in '$${scan_dir}'."
+			echo "      Rename foreign disks as '<vm> - <role>.asif' to attach them in this mode."
+		fi
 	fi
 fi
 endef
@@ -488,6 +498,23 @@ container_dev=""
 detach_targets=""
 cleanup_done=0
 cleanup_attached() {
+	detach_dev() {
+		local dev="$$1"
+		local tries=0
+		[[ -z "$$dev" ]] && return
+		dev="$${dev#/dev/}"
+		dev="/dev/$$dev"
+		while [[ "$$tries" -lt 3 ]]; do
+			diskutil unmountDisk force "$$dev" >/dev/null 2>&1 || true
+			diskutil detach "$$dev" >/dev/null 2>&1 || hdiutil detach -force "$$dev" >/dev/null 2>&1 || true
+			if ! diskutil info "$$dev" >/dev/null 2>&1; then
+				return
+			fi
+			tries=$$((tries+1))
+			sleep 1
+		done
+	}
+
 	if [[ "$$cleanup_done" == "1" ]]; then
 		return
 	fi
@@ -498,12 +525,12 @@ cleanup_attached() {
 	if [[ -n "$$detach_targets" ]]; then
 		while IFS= read -r dev; do
 			[[ -z "$$dev" ]] && continue
-			diskutil detach "$$dev" >/dev/null 2>&1 || true
+			detach_dev "$$dev"
 		done <<< "$$detach_targets"
 		return
 	fi
 	if [[ -n "$$base_dev" ]]; then
-		diskutil detach "$$base_dev" >/dev/null 2>&1 || true
+		detach_dev "$$base_dev"
 	fi
 }
 if [[ -n "$$base_dev" ]]; then
@@ -516,8 +543,40 @@ if [[ -n "$$volume_dev_candidates" ]]; then
 fi
 if [[ -z "$$volume_dev_candidates" ]]; then
 	attached_by_script=1
-	json="$$( diskutil image attach -nomount -nobrowse -plist "$$image_path" | \
-	      plutil -convert json -o - -- - )"
+	json=""
+	attach_err=""
+	for attach_try in 1 2 3; do
+		set +e
+		attach_plist="$$(diskutil image attach -nomount -nobrowse -plist "$$image_path" 2>&1)"
+		attach_ec=$$?
+		set -e
+		if [[ "$$attach_ec" -eq 0 ]]; then
+			json="$$(printf '%s\n' "$$attach_plist" | plutil -convert json -o - -- - 2>/dev/null || true)"
+			if [[ -n "$$json" ]]; then
+				attach_err=""
+				break
+			fi
+			attach_err="diskutil attach returned unparsable plist output"
+		else
+			attach_err="$$attach_plist"
+		fi
+		if [[ "$$attach_try" -lt 3 ]]; then
+			echo "Attach attempt $$attach_try failed for $$image_path; retrying..." >&2
+			sleep 1
+		fi
+	done
+	if [[ -z "$$json" ]]; then
+		if printf '%s\n' "$$attach_err" | grep -Eiq 'resource temporarily unavailable|device busy|resource busy'; then
+			echo "Skipping rename for in-use image: $$image_path" >&2
+			echo "Hint: stop VMs using this disk, then rerun rename target for full coverage." >&2
+			exit 0
+		fi
+		echo "Failed to attach image for rename: $$image_path" >&2
+		if [[ -n "$$attach_err" ]]; then
+			echo "Attach error: $$attach_err" >&2
+		fi
+		exit 1
+	fi
 	base_dev_raw="$$(printf '%s\n' "$$json" | yq -p json -r '."system-entities"[] | select(has("dev-entry")) | ."dev-entry" | select(test("^(/dev/)?disk[0-9]+$$"))')"
 	base_dev_raw="$${base_dev_raw%%$$'\n'*}"
 	detach_targets="$$(printf '%s\n' "$$json" | yq -p json -r '."system-entities"[] | select(has("dev-entry")) | ."dev-entry" | select(test("^(/dev/)?disk[0-9]+$$"))' | sed -E 's#^/dev/##' | awk '!seen[$$0]++ { print "/dev/" $$0 }')"
@@ -530,6 +589,12 @@ if [[ -z "$$volume_dev_candidates" ]]; then
 	fi
 	if [[ -z "$$volume_dev_candidates" ]]; then
 		volume_dev_candidates="$$(printf '%s\n' "$$json" | yq -p json -r '."system-entities"[] | select(has("dev-entry")) | ."dev-entry" | select(test("^(/dev/)?disk[0-9]+s[0-9]+$$"))')"
+	fi
+	if [[ -z "$$volume_dev_candidates" && -n "$$base_dev" ]]; then
+		apfs_json="$$(diskutil apfs list -plist "$$base_dev" 2>/dev/null | plutil -convert json -o - -- - 2>/dev/null || true)"
+		if [[ -n "$$apfs_json" ]]; then
+			volume_dev_candidates="$$(printf '%s\n' "$$apfs_json" | yq -p json -r '.Containers[]? | .Volumes[]? | .DeviceIdentifier // empty' | sed -E 's#^/dev/##' | awk 'NF && !seen[$$0]++ { print }')"
+		fi
 	fi
 	volume_dev_candidates="$$(printf '%s\n' "$$volume_dev_candidates" | awk '!seen[$$0]++')"
 fi
@@ -551,12 +616,35 @@ if [[ "$$attached_by_script" == "1" && -z "$$base_dev" ]]; then
 	cleanup_attached
 	exit 1
 fi
+# Expand raw APFS container slices (e.g. diskXs1 with empty VolumeName)
+# into concrete APFS volume devices from their container reference.
+expanded_volume_dev_candidates=""
+while IFS= read -r raw_candidate; do
+	[[ -z "$$raw_candidate" ]] && continue
+	raw_candidate_dev="$${raw_candidate#/dev/}"
+	raw_candidate_dev="/dev/$$raw_candidate_dev"
+	raw_candidate_info_json="$$(diskutil info -plist "$$raw_candidate_dev" | plutil -convert json -o - -- - 2>/dev/null || true)"
+	raw_candidate_name="$$(printf '%s\n' "$$raw_candidate_info_json" | yq -p json -r '.VolumeName // empty' 2>/dev/null || true)"
+	raw_candidate_container="$$(printf '%s\n' "$$raw_candidate_info_json" | yq -p json -r '.APFSContainerReference // empty' 2>/dev/null || true)"
+	if [[ -z "$$raw_candidate_name" && -n "$$raw_candidate_container" ]]; then
+		container_apfs_json="$$(diskutil apfs list -plist "/dev/$$raw_candidate_container" 2>/dev/null | plutil -convert json -o - -- - 2>/dev/null || true)"
+		container_volume_devs="$$(printf '%s\n' "$$container_apfs_json" | yq -p json -r '.Containers[]?.Volumes[]?.DeviceIdentifier // empty' 2>/dev/null || true)"
+		if [[ -n "$$container_volume_devs" ]]; then
+			expanded_volume_dev_candidates+="$$container_volume_devs"$$'\n'
+			continue
+		fi
+	fi
+	expanded_volume_dev_candidates+="$${raw_candidate_dev#/dev/}"$$'\n'
+done <<< "$$volume_dev_candidates"
+volume_dev_candidates="$$(printf '%s\n' "$$expanded_volume_dev_candidates" | awk 'NF && !seen[$$0]++ { print }')"
+
 mounted_for_rename=0
 rename_mount_dir=""
 volume_dev=""
 old_name=""
 encrypted_or_locked_detected=0
 container_mount_attempted=0
+saw_prefixed_volume=0
 rename_dry_run="$(.dry-run.disk.effective)"
 if [[ -z "$$rename_dry_run" ]]; then rename_dry_run=0; fi
 while IFS= read -r candidate; do
@@ -576,6 +664,7 @@ while IFS= read -r candidate; do
 		continue
 	fi
 	if [[ "$$candidate_old_name" == "$$prefix"* ]]; then
+		saw_prefixed_volume=1
 		continue
 	fi
 	candidate_mount_point="$$(printf '%s\n' "$$candidate_info_json" | yq -p json -r '.MountPoint')"
@@ -631,6 +720,11 @@ done <<< "$$volume_dev_candidates"
 if [[ -z "$$volume_dev" || -z "$$old_name" ]]; then
 	if [[ "$$rename_dry_run" == "1" ]]; then
 		echo "DRY-RUN: no eligible APFS rename candidate resolved for $$image_path; skipping"
+		cleanup_attached
+		exit 0
+	fi
+	if [[ "$$saw_prefixed_volume" == "1" ]]; then
+		echo "APFS volumes in $$image_path already use prefix '$$prefix'; nothing to rename."
 		cleanup_attached
 		exit 0
 	fi
@@ -761,13 +855,13 @@ printf '%s\n' \
 	"  generated_at: \"$$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" > "$@"
 endef
 
-.PHONY: help validate validate-packer validate-tart clone-from-vanilla ensure-root-disk-size prepare-disks check-prefixed-role-disks build build-rootfs build-image build-system-only build-with-role-disks build-nix-store-volume build-nix-install build-nxmatic build-super-token-refresh stage-grow stage-nix-store-volume stage-nix-install stage-nxmatic stage-super-token-refresh stage1 stage2 stage3 stage4 stage5 cleanup-stages run console run-recovery-console info disks-info rename-disk-volume rename-disk-volumes rename-disk-attached-volumes apfs-ownership-policy rm-runtime rm-runtime-one rm-role-disks rm-role-disks-one rm-owned-role-disks init-foreign-home rm refresh-console refresh promote shell-fmt shell-check fmt FORCE
+.PHONY: help validate validate-packer validate-tart clone-from-vanilla ensure-root-disk-size prepare-disks check-prefixed-role-disks build build-rootfs build-image build-system-only build-with-role-disks build-nix-store-volume build-nix-install build-nxmatic build-super-token-refresh stage-grow stage-nix-store-volume stage-nix-install stage-nxmatic stage-super-token-refresh stage1 stage2 stage3 stage4 stage5 cleanup-stages run console run-recovery-console info disks-info rename-disk-volume rename-disk-volumes rename-disk-attached-volumes rename-foreign-role-disk-volumes apfs-ownership-policy rm-runtime rm-runtime-one rm-role-disks rm-role-disks-one rm-owned-role-disks init-foreign-home rm refresh-console refresh promote shell-fmt shell-check fmt FORCE
 
 # Curated set of targets shown by `make help`
-.help.targets ?= help validate validate-packer validate-tart build stage1 stage2 stage3 stage4 stage5 cleanup-stages build-with-role-disks run console run-recovery-console info disks-info rename-disk-volumes rename-disk-attached-volumes apfs-ownership-policy init-foreign-home refresh-console refresh promote rm rm-runtime rm-role-disks shell-fmt shell-check fmt
+.help.targets ?= help validate validate-packer validate-tart build stage1 stage2 stage3 stage4 stage5 cleanup-stages build-with-role-disks run console run-recovery-console info disks-info rename-disk-volumes rename-disk-attached-volumes rename-foreign-role-disk-volumes apfs-ownership-policy init-foreign-home refresh-console refresh promote rm rm-runtime rm-role-disks shell-fmt shell-check fmt
 
 # Curated set of command-line variables shown by `make help`
-.help.vars ?= .interactive .debug .experimental .skip .dry-run .dry-run.tart .dry-run.disk .dry-run.packer .dry-run.apfs.ownership .tart.vm.name .tart.vm.names .tart.rm.vm.name .tart.base.ref .tart.base.home .tart.base.link-source .tart.stage.name-prefix .tart.stage.use-dedicated-homes .tart.stage.tart-home-root .tart.stage.link-source-vm .tart.stage.cleanup.on-success .tart.stage.cleanup.keep-logs .tart.stage.cleanup.include-stage1 .tart.stage1.tart-home .tart.stage2.tart-home .tart.stage3.tart-home .tart.stage4.tart-home .tart.update.from-vm .tart.update.to-vm .tart.update.profile .tart.update.relax-session-tweaks .tart.update.tart-home .tart.update.link-role-disks .tart.update.link-source-vm .tart.update.source-vm-alias .provision.profile .attach-data-disk-during-build .tart.disk.recreate .tart.clone.force .tart.disk.source-vm .tart.disk.prefix.owner .tart.disk.prefix.enforce .tart.disk.rename.home .tart.run.recovery .tart.run.vnc .tart.run.net-bridged .tart.run.extra-disks .tart.run.extra-disks.from-vm .tart.run.extra-disks.allow-duplicate-roles .tart.run.extra-disk.opts .rm.skip-owned-disks-when-add-renamed .tart.disk.path .tart.disk.path.rename .tart.disk.name .tart.disk.volume-devs .apfs.ownership.mode .apfs.ownership.all-roles .apfs.ownership.include-system-mounts .apfs.ownership.images .macos.relax-session-tweaks .account.primary-name .account.secondary-name .auto-login.user TART_HOME TART_HOME_FOREIGN
+.help.vars ?= .interactive .debug .experimental .skip .dry-run .dry-run.tart .dry-run.disk .dry-run.packer .dry-run.apfs.ownership .tart.vm.name .tart.vm.names .tart.rm.vm.name .tart.base.ref .tart.base.home .tart.base.link-source .tart.stage.name-prefix .tart.stage.use-dedicated-homes .tart.stage.tart-home-root .tart.stage.link-source-vm .tart.stage.cleanup.on-success .tart.stage.cleanup.keep-logs .tart.stage.cleanup.include-stage1 .tart.stage1.tart-home .tart.stage2.tart-home .tart.stage3.tart-home .tart.stage4.tart-home .tart.update.from-vm .tart.update.to-vm .tart.update.profile .tart.update.relax-session-tweaks .tart.update.tart-home .tart.update.link-role-disks .tart.update.link-source-vm .tart.update.source-vm-alias .provision.profile .attach-data-disk-during-build .tart.disk.recreate .tart.clone.force .tart.disk.source-vm .tart.disk.prefix.owner .tart.disk.prefix.enforce .tart.disk.rename.home .tart.run.recovery .tart.run.vnc .tart.run.net-bridged .tart.run.attach-foreign-renamed .tart.run.extra-disks .tart.run.extra-disks.from-vm .tart.run.extra-disks.allow-duplicate-roles .tart.run.extra-disk.opts .rm.skip-owned-disks-when-add-renamed .tart.disk.path .tart.disk.path.rename .tart.disk.name .tart.disk.volume-devs .apfs.ownership.mode .apfs.ownership.all-roles .apfs.ownership.include-system-mounts .apfs.ownership.images .macos.relax-session-tweaks .account.primary-name .account.secondary-name .auto-login.user TART_HOME TART_HOME_FOREIGN TART_ATTACH_FOREIGN_RENAMED
 
 .help.vars += TART_EXTRA_DISKS_ADD_RENAMED TART_EXTRA_DISKS_RENAMED_FROM_VM
 .no-pager ?= 0
@@ -853,9 +947,9 @@ ifneq ($(call opt-enabled,.attach-data-disk-during-build),)
 	$(call .tart.disk.cmd.ensure-parent,$(.tart.disk.user-build-chains-cache.image-path.effective))
 	$(call .tart.disk.cmd.ensure-parent,$(.tart.disk.vm-images.image-path.effective))
 	$(call .tart.disk.cmd.prepare-image,Users:$(.data.home-user),$(.tart.disk.user.image-path.effective),$(.tart.disk.user.max-size-gb))
-	$(call .tart.disk.cmd.prepare-image,$(.data.home-user) Build Chains Cache,$(.tart.disk.user-build-chains-cache.image-path.effective),$(.tart.disk.user-build-chains-cache.max-size-gb))
-	$(call .tart.disk.cmd.prepare-image,$(.data.home-user) Library Cache,$(.tart.disk.user-library.image-path.effective),$(.tart.disk.user-library.max-size-gb))
-	$(call .tart.disk.cmd.prepare-image,$(.data.home-user) VM Images,$(.tart.disk.vm-images.image-path.effective),$(.tart.disk.vm-images.max-size-gb))
+	$(call .tart.disk.cmd.prepare-image,Users:$(.data.home-user) Build Chains Cache,$(.tart.disk.user-build-chains-cache.image-path.effective),$(.tart.disk.user-build-chains-cache.max-size-gb))
+	$(call .tart.disk.cmd.prepare-image,Users:$(.data.home-user) Library Cache,$(.tart.disk.user-library.image-path.effective),$(.tart.disk.user-library.max-size-gb))
+	$(call .tart.disk.cmd.prepare-image,Users:$(.data.home-user) VM Images,$(.tart.disk.vm-images.image-path.effective),$(.tart.disk.vm-images.max-size-gb))
 	$(call .tart.disk.cmd.prepare-image,Git Store,$(.tart.disk.git-store.image-path.effective),$(.tart.disk.git-store.max-size-gb))
 	$(call .tart.disk.cmd.prepare-image,Git Bare Store,$(.tart.disk.git-bare-store.image-path.effective),$(.tart.disk.git-bare-store.max-size-gb))
 	$(call .tart.disk.cmd.prepare-image,Nix Store,$(.tart.disk.nix-store.image-path.effective),$(.tart.disk.nix-store.max-size-gb))
@@ -1162,11 +1256,23 @@ check-prefixed-role-disks: ## Validate role-disk volume names match '<owner> - '
 
 run: prepare-disks check-prefixed-role-disks ensure-root-disk-size $(.env.file) ## Run the built VM with all role disks attached
 	$(.tart.run.extra.disk.args.from-vm.shell)
-	$(call .tart.run,run $(.tart.vm.name) $(strip $(.tart.run.disk.args) $(.tart.run.extra.disk.args) $(.tart.run.extra-args)) $${extra_from_vm_args})
+	$(call .env.load)
+	if [[ "$(.dry-run.tart.effective)" == "1" ]]; then
+		printf 'DRY-RUN[tart]: %q ' $(.tart.cmd) run $(.tart.vm.name) $(strip $(.tart.run.disk.args) $(.tart.run.extra.disk.args) $(.tart.run.extra-args)) "$${extra_from_vm_args[@]}"
+		echo
+	else
+		$(.tart.cmd) run $(.tart.vm.name) $(strip $(.tart.run.disk.args) $(.tart.run.extra.disk.args) $(.tart.run.extra-args)) "$${extra_from_vm_args[@]}"
+	fi
 
 console: prepare-disks check-prefixed-role-disks ensure-root-disk-size $(.env.file) ## Run VM with console troubleshooting defaults (Screen Sharing VNC + optional bridge/recovery)
 	$(.tart.run.extra.disk.args.from-vm.shell)
-	$(call .tart.run,run $(.tart.vm.name) $(strip $(.tart.run.console.args) $(.tart.run.disk.args) $(.tart.run.extra.disk.args) $(.tart.run.extra-args)) $${extra_from_vm_args})
+	$(call .env.load)
+	if [[ "$(.dry-run.tart.effective)" == "1" ]]; then
+		printf 'DRY-RUN[tart]: %q ' $(.tart.cmd) run $(.tart.vm.name) $(strip $(.tart.run.console.args) $(.tart.run.disk.args) $(.tart.run.extra.disk.args) $(.tart.run.extra-args)) "$${extra_from_vm_args[@]}"
+		echo
+	else
+		$(.tart.cmd) run $(.tart.vm.name) $(strip $(.tart.run.console.args) $(.tart.run.disk.args) $(.tart.run.extra.disk.args) $(.tart.run.extra-args)) "$${extra_from_vm_args[@]}"
+	fi
 
 run-recovery-console: .tart.run.recovery=1
 run-recovery-console: console ## Run VM in recovery mode with console troubleshooting defaults
@@ -1177,12 +1283,12 @@ info: $(.env.file) ## Show Tart VM details
 
 disks-info: ## Show role disk files and sizes
 	$(call .tart.disk.cmd.show-info,Data-Home-$(.data.home-user),$(.tart.disk.user.image-path.effective))
-	$(call .tart.disk.cmd.show-info,Data Library Cache $(.data.home-user),$(.tart.disk.user-library.image-path.effective))
+	$(call .tart.disk.cmd.show-info,Users:$(.data.home-user) Library Cache,$(.tart.disk.user-library.image-path.effective))
 	$(call .tart.disk.cmd.show-info,Git Bare Store,$(.tart.disk.git-bare-store.image-path.effective))
 	$(call .tart.disk.cmd.show-info,Git Store,$(.tart.disk.git-store.image-path.effective))
 	$(call .tart.disk.cmd.show-info,Nix Store,$(.tart.disk.nix-store.image-path.effective))
-	$(call .tart.disk.cmd.show-info,Data Build Chains Cache $(.data.home-user),$(.tart.disk.user-build-chains-cache.image-path.effective))
-	$(call .tart.disk.cmd.show-info,Data VM Images $(.data.home-user),$(.tart.disk.vm-images.image-path.effective))
+	$(call .tart.disk.cmd.show-info,Users:$(.data.home-user) Build Chains Cache,$(.tart.disk.user-build-chains-cache.image-path.effective))
+	$(call .tart.disk.cmd.show-info,Users:$(.data.home-user) VM Images,$(.tart.disk.vm-images.image-path.effective))
 
 rename-disk-volume: ## Rename APFS volume inside one ASIF image (.tart.disk.path required; .tart.disk.path.rename optional override; use .dry-run.disk=1 to avoid rename writes)
 	if [[ -z "$(strip $(.tart.disk.path.effective))" ]]; then
@@ -1194,6 +1300,26 @@ rename-disk-volume: ## Rename APFS volume inside one ASIF image (.tart.disk.path
 	$(.tart.disk.cmd.rename-volume)
 
 rename-disk-volumes: rename-disk-volumes-check $(.tart.vm.name.paths.rename-targets) ## Rename all ASIF APFS volumes from .tart.vm.name with '<vm> - ' prefix by default
+
+rename-foreign-role-disk-volumes: ## Rename APFS labels in foreign role disks with '<vm> - ' ownership prefix (space-safe)
+	disks_dir="$(.tart.home.foreign)/disks/$(.tart.vm.name)"
+	if [[ ! -d "$$disks_dir" ]]; then
+		echo "No foreign disk directory found: $$disks_dir" >&2
+		exit 2
+	fi
+	found=0
+	while IFS= read -r -d '' img; do
+		found=1
+		$(MAKE) rename-disk-volume \
+			.tart.disk.path.rename="$$img" \
+			.tart.disk.name="$(.tart.vm.name) - " \
+			.dry-run="$(.dry-run)" \
+			.dry-run.disk="$(.dry-run.disk.effective)"
+	done < <(find "$$disks_dir" -maxdepth 1 -type f -name '*.asif' -print0 | sort -z)
+	if [[ "$$found" != "1" ]]; then
+		echo "No foreign .asif images found in $$disks_dir" >&2
+		exit 2
+	fi
 
 rename-disk-attached-volumes: $(.tart.disk.volume-devs.rename-targets) ## Rename explicit attached APFS volume devices from .tart.disk.volume-devs for one .tart.disk.path
 	if [[ -z "$(strip $(.tart.disk.path.effective))" ]]; then
