@@ -494,7 +494,16 @@ build {
       "staging='/private/tmp/macos-image-template.envrc.upload'",
       "runtime_envrc=\"$(mktemp /private/tmp/macos-image-template.envrc.XXXXXX)\"",
       "mv \"$staging\" \"$runtime_envrc\"",
+      "cat >> \"$runtime_envrc\" <<'EOF'",
+      "# Canonical runtime identity injected from packer variables",
+      "PRIMARY_ACCOUNT_NAME='${var.macos_primary_account_name}'",
+      "PRIMARY_ACCOUNT_FULL_NAME='${var.macos_primary_account_full_name}'",
+      "PRIMARY_ACCOUNT_ALIAS='${var.macos_primary_account_alias}'",
+      "DATA_HOME_USER='${var.macos_data_home_user}'",
+      "EOF",
+      "cp \"$runtime_envrc\" '${var.macos_vm_scripts_dir}/.envrc'",
       "chmod 0600 \"$runtime_envrc\"",
+      "chmod 0600 '${var.macos_vm_scripts_dir}/.envrc'",
       "printf '%s\\n' \"$runtime_envrc\" > '${var.macos_env_pointer_file}'",
       "chmod 0600 '${var.macos_env_pointer_file}'",
     ]
@@ -540,6 +549,8 @@ build {
   }
 
   provisioner "shell" {
+    expect_disconnect = true
+    valid_exit_codes  = [0, 2300218]
     inline = [
       "set -euo pipefail",
       "env MACOS_ENV_FILE=\"$(cat '${var.macos_env_pointer_file}')\" bash -euxo pipefail '${var.macos_vm_scripts_dir}/setup-data-disk.sh'",

@@ -21,6 +21,25 @@ Minimal, owner-focused Tart/Packer project to build a customized Tahoe vanilla i
 * Build image: `make build`
 * Run VM + role disks: `make run`
 
+== Recovery / console cheatsheet
+
+Use these as the canonical operator commands when reconnecting to this project.
+
+* Recovery boot with VNC + split role disks (recommended):
+** `make run-recovery-console .tart.vm-name=nikopol .tart.run.disk.opts=sync=none,caching=cached`
+* Normal boot with VNC + split role disks:
+** `make run-console .tart.vm-name=nikopol .tart.run.disk.opts=sync=none,caching=cached`
+* Rebuild image (interactive/debug defaults):
+** `make build`
+* Show exact generated command without running it:
+** `make -n run-recovery-console .tart.vm-name=nikopol .tart.run.disk.opts=sync=none,caching=cached`
+
+Notes:
+
+* The `run-console` and `run-recovery-console` targets already attach split Git disks (`git-bare-store` + `git-worktree-store`) and `vm-images`.
+* Keep `--recovery` on the same Tart command line (the Make target handles this).
+* Role disk images live under `~/.tart/disks/<vm_name>/` by default and are reused when present.
+
 == Initialization policy (intentional)
 
 This project intentionally keeps VM initialization user-driven (interactive + debug by default).

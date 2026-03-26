@@ -12,10 +12,11 @@ if [[ -f "${ENV_FILE}" ]]; then
   source "${ENV_FILE}"
 fi
 
-: "${NIX_INSTALLER_URL:=https://artifacts.nixos.org/nix-installer}"
+: "${NIX_INSTALLER_URL:=o}"
 : "${NIX_INSTALLER_PATH:=/private/tmp/nix-installer}"
 : "${NIX_INSTALL_AT_BUILD:=1}"
 : "${NIX_INSTALL_ALLOW_UNMOUNTED_NIX:=1}"
+: "${NIX_DEFER_INSTALL_ON_MOUNT_FAILURE:=1}"
 : "${NIX_EXPECTED_VOLUME_LABEL:=Nix Store}"
 : "${NIX_REQUIRE_EXISTING_STORE_VOLUME:=1}"
 : "${FLOX_INSTALL_WITH_NIX:=1}"
@@ -23,6 +24,8 @@ fi
 : "${NIX_DARWIN_INSTALL_WITH_NIX:=1}"
 : "${NIX_DARWIN_INSTALL_REF:=nix-darwin/nix-darwin}"
 : "${NIX_BOOTSTRAP_USER:=${DATA_HOME_USER:-${PRIMARY_ACCOUNT_NAME:-}}}"
+
+NIX_MOUNT_RECOVERY_DEFERRED=0
 
 : "Fetch modern Nix installer"
 sudo mkdir -p "$(dirname "${NIX_INSTALLER_PATH}")"
@@ -73,6 +76,77 @@ verify_nix_mount_matches_expected() {
   return 0
 }
 
+ensure_synthetic_nix_anchor() {
+  local synthetic_conf="/etc/synthetic.conf"
+  local synthetic_entry=$'nix\tSystem/Volumes/Data/nix'
+
+  sudo mkdir -p /System/Volumes/Data/nix
+  sudo touch "${synthetic_conf}"
+
+  if ! sudo grep -Fqx "${synthetic_entry}" "${synthetic_conf}"; then
+    echo "Ensuring synthetic /nix anchor in ${synthetic_conf}."
+    printf '%s\n' "${synthetic_entry}" | sudo tee -a "${synthetic_conf}" >/dev/null
+  fi
+}
+
+attempt_direct_nix_mount_from_expected_volume() {
+  local vol_label="$1"
+  local expected_dev=""
+  local mount_target="/nix"
+  local apfs_boot_util_bin="/System/Library/Filesystems/apfs.fs/Contents/Resources/apfs_boot_util"
+
+  expected_dev="$(device_identifier_for_ref "${vol_label}")"
+  if [[ -z "${expected_dev}" ]]; then
+    echo "Warning: unable to resolve expected device for volume '${vol_label}' during direct /nix mount attempt."
+    return 1
+  fi
+
+  if [[ ! -e /nix ]]; then
+    if ! sudo mkdir -p /nix >/dev/null 2>&1; then
+      echo "Info: /nix cannot be created directly (likely read-only root); using synthetic Data anchor fallback."
+      ensure_synthetic_nix_anchor
+      mount_target="/System/Volumes/Data/nix"
+      if [[ -x "${apfs_boot_util_bin}" ]]; then
+        sudo "${apfs_boot_util_bin}" 1 || true
+        sudo "${apfs_boot_util_bin}" 2 || true
+      fi
+    fi
+  fi
+
+  if [[ "${mount_target}" == "/nix" && ! -d /nix ]]; then
+    echo "Warning: /nix mountpoint is still unavailable."
+    return 1
+  fi
+
+  if mount | grep -Eq ' on /nix '; then
+    return 0
+  fi
+
+  echo "Attempting direct mount of /dev/${expected_dev} at ${mount_target}..."
+  sudo mount -t apfs "/dev/${expected_dev}" "${mount_target}" >/dev/null 2>&1 || true
+
+  if mount | grep -Eq ' on /nix '; then
+    echo "Direct mount succeeded for /dev/${expected_dev} -> /nix."
+    return 0
+  fi
+
+  if [[ "${mount_target}" != "/nix" ]] && mount | grep -Eq " on ${mount_target//\//\/} "; then
+    echo "Info: volume mounted at ${mount_target}; re-running APFS boot phases to expose /nix synthetic path."
+    if [[ -x "${apfs_boot_util_bin}" ]]; then
+      sudo "${apfs_boot_util_bin}" 1 || true
+      sudo "${apfs_boot_util_bin}" 2 || true
+    fi
+  fi
+
+  if mount | grep -Eq ' on /nix '; then
+    echo "Synthetic /nix path became active after APFS boot phases."
+    return 0
+  fi
+
+  echo "Warning: direct mount recovery did not produce /nix mountpoint for /dev/${expected_dev}."
+  return 1
+}
+
 ensure_nix_mountpoint_uses_expected_volume() {
   local vol_label="$1"
   local require_existing="$2"
@@ -110,7 +184,20 @@ ensure_nix_mountpoint_uses_expected_volume() {
   fi
 
   if ! verify_nix_mount_matches_expected "${vol_label}" "${require_existing}"; then
+    attempt_direct_nix_mount_from_expected_volume "${vol_label}" || true
+  fi
+
+  if ! verify_nix_mount_matches_expected "${vol_label}" "${require_existing}"; then
     if [[ "${require_existing}" == "1" ]]; then
+      if [[ "${NIX_INSTALL_ALLOW_UNMOUNTED_NIX}" == "1" ]]; then
+        echo "Warning: expected volume '${vol_label}' exists but /nix is not correctly mounted after all mount attempts; continuing because NIX_INSTALL_ALLOW_UNMOUNTED_NIX=1." >&2
+        return 0
+      fi
+      if [[ "${NIX_DEFER_INSTALL_ON_MOUNT_FAILURE}" == "1" ]]; then
+        echo "Warning: unable to realize /nix mountpoint for '${vol_label}' in this boot; deferring Nix installation because NIX_DEFER_INSTALL_ON_MOUNT_FAILURE=1." >&2
+        NIX_MOUNT_RECOVERY_DEFERRED=1
+        return 0
+      fi
       echo "Error: expected volume '${vol_label}' exists but /nix is not correctly mounted after apfs_boot_util phases; refusing installer run to avoid duplicate volume creation." >&2
     fi
     exit 1
@@ -118,6 +205,13 @@ ensure_nix_mountpoint_uses_expected_volume() {
 }
 
 ensure_nix_mountpoint_uses_expected_volume "${NIX_EXPECTED_VOLUME_LABEL}" "${NIX_REQUIRE_EXISTING_STORE_VOLUME}"
+
+if [[ "${NIX_MOUNT_RECOVERY_DEFERRED}" == "1" ]]; then
+  echo "Nix installer staged at ${NIX_INSTALLER_PATH}."
+  echo "Deferred install mode due to unresolved /nix mountpoint in current boot."
+  echo "After reboot in guest, run: sudo bash -x '${NIX_INSTALLER_PATH}' install macos --no-confirm --volume-label '${NIX_EXPECTED_VOLUME_LABEL}'"
+  exit 0
+fi
 
 : "Run modern Nix installer"
 sudo bash -x "${NIX_INSTALLER_PATH}" install macos --no-confirm --volume-label "${NIX_EXPECTED_VOLUME_LABEL}"

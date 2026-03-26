@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "asciidoctor.asciidoctor-vscode",
+    "hashicorp.terraform",
+    "redhat.vscode-yaml",
+    "mkhl.shfmt"
+  ],
+  "unwantedRecommendations": [
+    "sonarsource.sonarlint-vscode",
+    "Codeium.codeium"
+  ]
+}
